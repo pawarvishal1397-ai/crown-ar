@@ -1,0 +1,371 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <title>Crown AR</title>
+
+    <!-- Check importmap support BEFORE loading anything -->
+    <script>
+      if (!HTMLScriptElement.supports || !HTMLScriptElement.supports('importmap')) {
+        document.addEventListener('DOMContentLoaded', function () {
+          document.body.innerHTML =
+            '<div style="font-family:sans-serif;background:#1a1a2e;color:#fff;' +
+            'height:100vh;display:flex;flex-direction:column;align-items:center;' +
+            'justify-content:center;padding:24px;text-align:center;gap:16px;">' +
+            '<div style="font-size:48px">&#x26A0;</div>' +
+            '<div style="color:#ffd700;font-size:18px;font-weight:700">Browser Not Supported</div>' +
+            '<div style="color:#aaa;font-size:14px;max-width:280px">' +
+            'Please open this page in <strong style="color:#fff">Chrome</strong> ' +
+            '(Android) or <strong style="color:#fff">Safari 16.4+</strong> (iPhone).</div></div>';
+        });
+      }
+
+      // ── Force BACK camera before MindAR initialises ──────────
+      // MindAR calls getUserMedia internally — we intercept it here.
+      (function () {
+        const _gum = navigator.mediaDevices.getUserMedia.bind(navigator.mediaDevices);
+        navigator.mediaDevices.getUserMedia = function (constraints) {
+          if (constraints && constraints.video) {
+            const base = typeof constraints.video === 'object' ? constraints.video : {};
+            constraints.video = Object.assign({}, base, {
+              facingMode: { ideal: 'environment' }, // back camera
+              width:  { ideal: 1280 },
+              height: { ideal: 720 },
+            });
+          }
+          return _gum(constraints);
+        };
+      })();
+    </script>
+
+    <!-- Map bare module names to local files — works 100% offline -->
+    <script type="importmap">
+    {
+      "imports": {
+        "three":          "./libs/three.module.min.js",
+        "three/addons/":  "./libs/addons/"
+      }
+    }
+    </script>
+
+    <style>
+      *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+      html, body {
+        width: 100%; height: 100%;
+        overflow: hidden;
+        background: #000;
+        touch-action: none;
+      }
+
+      /* MindAR container — true full screen */
+      #container {
+        position: fixed;
+        top: 0; left: 0;
+        width: 100vw;
+        height: 100vh;
+      }
+
+      /* MindAR renders a canvas + video inside #container.
+         Force both to fill the container completely. */
+      #container canvas,
+      #container video {
+        position: absolute !important;
+        top: 0 !important; left: 0 !important;
+        width: 100% !important;
+        height: 100% !important;
+        object-fit: cover !important;
+      }
+
+      /* ── Loading screen ─────────────────────────────────────── */
+      #loading-screen {
+        position: fixed; inset: 0; z-index: 999;
+        background: linear-gradient(135deg, #1a1a2e, #16213e);
+        display: flex; flex-direction: column;
+        align-items: center; justify-content: center; gap: 16px;
+        font-family: sans-serif; color: #fff;
+        transition: opacity 0.5s ease;
+      }
+      #loading-screen.fade-out { opacity: 0; pointer-events: none; }
+
+      .crown-icon { font-size: 64px; animation: pulse 1.5s ease-in-out infinite; }
+      @keyframes pulse {
+        0%, 100% { transform: scale(1); }
+        50%       { transform: scale(1.12); }
+      }
+
+      #loading-title { font-size: 22px; font-weight: 700; color: #ffd700; letter-spacing: 3px; }
+      #loading-text  { font-size: 13px; color: #aaa; }
+
+      .progress-wrap {
+        width: 200px; height: 3px;
+        background: rgba(255,255,255,0.12); border-radius: 99px; overflow: hidden;
+      }
+      .progress-bar {
+        height: 100%; width: 0%;
+        background: linear-gradient(90deg, #ffd700, #ffaa00);
+        border-radius: 99px; transition: width 0.3s ease;
+      }
+
+      #error-box {
+        display: none;
+        background: rgba(255,60,60,0.15); border: 1px solid rgba(255,60,60,0.5);
+        color: #ff8080; padding: 12px 20px; border-radius: 8px;
+        font-size: 13px; text-align: center; max-width: 300px; line-height: 1.5;
+      }
+
+      /* ── HUD overlays ───────────────────────────────────────── */
+      #hint {
+        position: fixed; bottom: 32px; left: 50%; transform: translateX(-50%);
+        background: rgba(0,0,0,0.6); color: #fff;
+        padding: 10px 22px; border-radius: 999px;
+        font-family: sans-serif; font-size: 14px;
+        pointer-events: none; opacity: 0; transition: opacity 0.4s; z-index: 100;
+        white-space: nowrap; border: 1px solid rgba(255,215,0,0.25);
+      }
+      #hint.show { opacity: 1; }
+
+      #badge {
+        position: fixed; top: env(safe-area-inset-top, 18px); left: 50%;
+        transform: translateX(-50%);
+        background: rgba(255,215,0,0.15); border: 1px solid rgba(255,215,0,0.6);
+        color: #ffd700; padding: 6px 18px; border-radius: 999px;
+        font-family: sans-serif; font-size: 13px; font-weight: 700; letter-spacing: 1px;
+        pointer-events: none; opacity: 0; transition: opacity 0.4s; z-index: 100;
+      }
+      #badge.show { opacity: 1; }
+    </style>
+  </head>
+
+  <body>
+    <div id="loading-screen">
+      <div class="crown-icon">&#x1F451;</div>
+      <div id="loading-title">CROWN AR</div>
+      <div id="loading-text">Loading crown model...</div>
+      <div class="progress-wrap"><div class="progress-bar" id="pbar"></div></div>
+      <div id="error-box"></div>
+    </div>
+
+    <div id="hint">Point camera at a face</div>
+    <div id="badge">CROWNED &#x1F451;</div>
+    <div id="container"></div>
+
+    <script type="module">
+      import * as THREE from 'three';
+      import { GLTFLoader }  from 'three/addons/loaders/GLTFLoader.js';
+      import { MindARThree } from './libs/mindar-face-three.prod.js';
+
+      // ── UI helpers ────────────────────────────────────────────
+      const loadingScreen = document.getElementById('loading-screen');
+      const loadingText   = document.getElementById('loading-text');
+      const pbar          = document.getElementById('pbar');
+      const errorBox      = document.getElementById('error-box');
+      const hint          = document.getElementById('hint');
+      const badge         = document.getElementById('badge');
+
+      let hintTimer;
+      function showHint(msg, ms = 3000) {
+        clearTimeout(hintTimer);
+        hint.textContent = msg;
+        hint.classList.add('show');
+        hintTimer = setTimeout(() => hint.classList.remove('show'), ms);
+      }
+
+      function setProgress(pct) { pbar.style.width = pct + '%'; }
+
+      function showError(msg) {
+        errorBox.style.display = 'block';
+        errorBox.textContent   = msg;
+        loadingText.textContent = 'Something went wrong';
+        setProgress(0);
+      }
+
+      function hideLoading() {
+        loadingScreen.classList.add('fade-out');
+        setTimeout(() => { loadingScreen.style.display = 'none'; }, 600);
+      }
+
+      // ── MindAR scene ──────────────────────────────────────────
+      const mindarThree = new MindARThree({
+        container: document.getElementById('container'),
+      });
+      const { renderer, scene, camera } = mindarThree;
+
+      // Make renderer fill full screen
+      renderer.setPixelRatio(window.devicePixelRatio);
+      renderer.setSize(window.innerWidth, window.innerHeight);
+
+      window.addEventListener('resize', () => {
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        camera.aspect = window.innerWidth / window.innerHeight;
+        camera.updateProjectionMatrix();
+      });
+
+      // ── Lighting ──────────────────────────────────────────────
+      scene.add(new THREE.AmbientLight(0xffffff, 1.5));
+
+      const keyLight = new THREE.DirectionalLight(0xffd700, 2.5);
+      keyLight.position.set(0, 5, 3);
+      scene.add(keyLight);
+
+      const fillLight = new THREE.PointLight(0xffcc44, 1.2, 10);
+      fillLight.position.set(-2, 3, 2);
+      scene.add(fillLight);
+
+      const rimLight = new THREE.DirectionalLight(0xffffff, 0.8);
+      rimLight.position.set(0, -3, -3);
+      scene.add(rimLight);
+
+      // ── Face anchor ───────────────────────────────────────────
+      // Landmark 10 = top-center of forehead in MediaPipe 468-point mesh
+      const anchor = mindarThree.addAnchor(10);
+
+      anchor.onTargetFound = () => {
+        badge.classList.add('show');
+        showHint('Crown on!', 2000);
+      };
+      anchor.onTargetLost = () => {
+        badge.classList.remove('show');
+        showHint('Looking for a face...', 2500);
+      };
+
+      // ── Sparkle particles ─────────────────────────────────────
+      const N        = 100;
+      const ppos     = new Float32Array(N * 3);
+      const pvels    = [];
+
+      function resetP(i) {
+        const a = Math.random() * Math.PI * 2;
+        const r = Math.random() * 0.25;
+        ppos[i*3]   = Math.cos(a) * r;
+        ppos[i*3+1] = 0.05 + Math.sin(a) * 0.05;
+        ppos[i*3+2] = (Math.random() - 0.5) * 0.1;
+        pvels[i] = {
+          vx: (Math.random() - 0.5) * 0.004,
+          vy: Math.random() * 0.005 + 0.001,
+          vz: (Math.random() - 0.5) * 0.003,
+          life: Math.random(),
+          max: 0.5 + Math.random() * 1.0,
+        };
+      }
+      for (let i = 0; i < N; i++) resetP(i);
+
+      const pgeo = new THREE.BufferGeometry();
+      pgeo.setAttribute('position', new THREE.BufferAttribute(ppos, 3));
+
+      const pmat = new THREE.PointsMaterial({
+        color: 0xffd700, size: 0.022,
+        transparent: true, opacity: 0.9,
+        depthWrite: false, blending: THREE.AdditiveBlending,
+      });
+      anchor.group.add(new THREE.Points(pgeo, pmat));
+
+      // ── Crown model ───────────────────────────────────────────
+      let crownModel = null;
+      let mixer      = null;
+
+      setProgress(10);
+
+      new GLTFLoader().load(
+        './assets/crown.glb',
+
+        (gltf) => {
+          crownModel = gltf.scene;
+
+          // ── Smart scaling: match crown width to face width ──
+          // In MindAR face-space, the face is ~1 unit wide.
+          // We scale the crown so its X (width) ≈ 0.95 units
+          // so it fits snugly across the forehead.
+          const box    = new THREE.Box3().setFromObject(crownModel);
+          const size   = box.getSize(new THREE.Vector3());
+          const center = box.getCenter(new THREE.Vector3());
+
+          // Scale by width so crown spans the forehead
+          const scale  = 0.95 / size.x;
+          crownModel.scale.setScalar(scale);
+
+          // Center horizontally, sit just above the forehead anchor
+          crownModel.position.set(
+            -center.x * scale,               // center X
+             0.10 - center.y * scale,         // slight upward offset from landmark
+            -center.z * scale - 0.05          // slight forward offset
+          );
+
+          anchor.group.add(crownModel);
+
+          // Play embedded animations if present
+          if (gltf.animations && gltf.animations.length > 0) {
+            mixer = new THREE.AnimationMixer(crownModel);
+            gltf.animations.forEach(c => mixer.clipAction(c).play());
+          }
+
+          setProgress(90);
+          loadingText.textContent = 'Starting camera...';
+
+          mindarThree.start()
+            .then(() => {
+              setProgress(100);
+              hideLoading();
+              showHint('Point camera at a face', 5000);
+            })
+            .catch((err) => {
+              if (err && err.name === 'NotAllowedError') {
+                showError('Camera access denied.\nPlease allow camera and reload.');
+              } else {
+                showError('Could not start camera:\n' + (err && err.message || String(err)));
+              }
+            });
+        },
+
+        (xhr) => {
+          if (xhr.total > 0) {
+            const pct = 10 + Math.round((xhr.loaded / xhr.total) * 75);
+            setProgress(pct);
+            loadingText.textContent = 'Loading crown... ' + Math.round(xhr.loaded / xhr.total * 100) + '%';
+          }
+        },
+
+        (err) => {
+          showError('Could not load crown.glb\n' + (err && err.message || ''));
+          console.error(err);
+        }
+      );
+
+      // ── Render loop ───────────────────────────────────────────
+      const clock = new THREE.Clock();
+      let elapsed = 0;
+
+      renderer.setAnimationLoop(() => {
+        const delta = clock.getDelta();
+        elapsed += delta;
+
+        if (mixer) mixer.update(delta);
+
+        // Floating + gentle tilt animation when no embedded GLTF anim
+        if (crownModel && !mixer) {
+          crownModel.position.y = 0.10 + Math.sin(elapsed * 1.8) * 0.015;
+          crownModel.rotation.z = Math.sin(elapsed * 0.9) * 0.04;
+        }
+
+        // Update sparkles
+        const pa = pgeo.attributes.position;
+        for (let i = 0; i < N; i++) {
+          const v = pvels[i];
+          v.life += delta;
+          if (v.life >= v.max) { resetP(i); pvels[i].life = 0; continue; }
+          pa.array[i*3]   += v.vx;
+          pa.array[i*3+1] += v.vy;
+          pa.array[i*3+2] += v.vz;
+        }
+        pa.needsUpdate = true;
+        pmat.opacity = 0.5 + Math.sin(elapsed * 3) * 0.4;
+
+        renderer.render(scene, camera);
+      });
+    </script>
+  </body>
+</html>
