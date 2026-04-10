@@ -3,94 +3,158 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
-  <meta name="mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-  <title>Thanos AR</title>
+  <title>Name AR</title>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
-    body { background: #000; overflow: hidden; width: 100vw; height: 100vh; }
+    body { background: #06010f; overflow: hidden; width: 100vw; height: 100vh; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; }
 
-    #video {
-      position: fixed; top: 0; left: 0;
-      width: 100%; height: 100%;
-      object-fit: cover;
+    /* ── LANDING PAGE ── */
+    #landing {
+      position: fixed; inset: 0; z-index: 500;
+      display: flex; flex-direction: column;
+      align-items: center; justify-content: center;
+      gap: 28px;
+      background: radial-gradient(ellipse at 50% 40%, #1a0540 0%, #06010f 70%);
     }
 
-    #canvas {
-      position: fixed; top: 0; left: 0;
-      width: 100%; height: 100%;
-      pointer-events: none;
+    .stars {
+      position: absolute; inset: 0; overflow: hidden; pointer-events: none;
+    }
+    .star {
+      position: absolute; background: #fff; border-radius: 50%;
+      animation: twinkle var(--d) ease-in-out infinite alternate;
+    }
+    @keyframes twinkle { from { opacity: 0.1; } to { opacity: 0.9; } }
+
+    .landing-icon { font-size: 60px; animation: float 3s ease-in-out infinite; }
+    @keyframes float {
+      0%,100% { transform: translateY(0); }
+      50%      { transform: translateY(-10px); }
     }
 
-    /* mirrored class — applied to both video + canvas for front cam */
-    .mirrored { transform: scaleX(-1); }
-
-    #flip-btn {
-      position: fixed; top: 18px; right: 18px; z-index: 200;
-      background: rgba(0,0,0,0.55);
+    .landing-title {
       color: #fff;
-      border: 2px solid rgba(255,255,255,0.25);
-      border-radius: 50px;
-      padding: 10px 16px;
-      font-size: 22px;
+      font-size: clamp(26px, 8vw, 44px);
+      font-weight: 800;
+      text-align: center;
+      letter-spacing: -0.5px;
+    }
+    .landing-sub {
+      color: rgba(255,255,255,0.5);
+      font-size: clamp(13px, 4vw, 17px);
+      text-align: center;
+      max-width: 280px;
+      line-height: 1.5;
+    }
+
+    #name-input {
+      width: min(340px, 85vw);
+      background: rgba(255,255,255,0.08);
+      border: 2px solid rgba(255,255,255,0.2);
+      border-radius: 60px;
+      color: #fff;
+      font-size: clamp(18px, 5vw, 24px);
+      font-weight: 600;
+      padding: 16px 28px;
+      text-align: center;
+      outline: none;
+      transition: border-color 0.2s, box-shadow 0.2s;
+      caret-color: #a855f7;
+    }
+    #name-input::placeholder { color: rgba(255,255,255,0.25); }
+    #name-input:focus {
+      border-color: #a855f7;
+      box-shadow: 0 0 0 4px rgba(168,85,247,0.2);
+    }
+
+    #ok-btn {
+      width: min(340px, 85vw);
+      background: linear-gradient(135deg, #7c3aed, #4f46e5);
+      color: #fff;
+      border: none; border-radius: 60px;
+      font-size: clamp(17px, 5vw, 22px);
+      font-weight: 700;
+      padding: 16px 28px;
       cursor: pointer;
-      backdrop-filter: blur(8px);
-      -webkit-backdrop-filter: blur(8px);
-      user-select: none;
+      box-shadow: 0 8px 32px rgba(124,58,237,0.45);
+      transition: transform 0.15s, box-shadow 0.15s;
+      -webkit-tap-highlight-color: transparent;
+    }
+    #ok-btn:active { transform: scale(0.96); box-shadow: 0 4px 16px rgba(124,58,237,0.3); }
+    #ok-btn:disabled { opacity: 0.5; cursor: default; }
+
+    /* ── AR VIEW ── */
+    #ar-wrap {
+      position: fixed; inset: 0; z-index: 1;
+      display: none;
+    }
+
+    /* flip button */
+    #flip-btn {
+      position: fixed; top: 18px; right: 18px; z-index: 300;
+      background: rgba(0,0,0,0.55);
+      color: #fff; border: 2px solid rgba(255,255,255,0.2);
+      border-radius: 50px; padding: 10px 16px;
+      font-size: 22px; cursor: pointer;
+      backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
+      display: none;
       -webkit-tap-highlight-color: transparent;
     }
 
-    #status {
-      position: fixed; bottom: 28px;
-      left: 50%; transform: translateX(-50%);
-      z-index: 200;
-      background: rgba(0,0,0,0.65);
-      color: #fff;
-      padding: 10px 22px;
-      border-radius: 24px;
-      font-size: 14px;
-      font-family: -apple-system, BlinkMacSystemFont, sans-serif;
-      text-align: center;
-      max-width: 85vw;
-      transition: opacity 0.6s;
-      pointer-events: none;
-    }
-
-    /* loading spinner */
+    /* loading overlay */
     #loader {
-      position: fixed; top: 50%; left: 50%;
-      transform: translate(-50%, -50%);
-      z-index: 300;
-      display: flex; flex-direction: column;
-      align-items: center; gap: 16px;
+      position: fixed; inset: 0; z-index: 400;
+      background: #06010f;
+      display: none;
+      flex-direction: column; align-items: center; justify-content: center;
+      gap: 18px;
     }
     .spinner {
-      width: 52px; height: 52px;
-      border: 5px solid rgba(150,80,255,0.3);
-      border-top-color: #9f50ff;
+      width: 54px; height: 54px;
+      border: 5px solid rgba(168,85,247,0.25);
+      border-top-color: #a855f7;
       border-radius: 50%;
-      animation: spin 0.9s linear infinite;
-    }
-    .loader-text {
-      color: #fff; font-size: 15px;
-      font-family: -apple-system, sans-serif;
+      animation: spin 0.85s linear infinite;
     }
     @keyframes spin { to { transform: rotate(360deg); } }
+    .loader-label {
+      color: rgba(255,255,255,0.7);
+      font-size: 15px;
+    }
+
+    /* status toast */
+    #status {
+      position: fixed; bottom: 28px; left: 50%; transform: translateX(-50%);
+      z-index: 300;
+      background: rgba(0,0,0,0.65);
+      color: #fff; padding: 10px 22px;
+      border-radius: 24px; font-size: 14px;
+      white-space: nowrap;
+      opacity: 0; transition: opacity 0.4s;
+      pointer-events: none;
+    }
   </style>
 </head>
 <body>
 
-<video id="video" autoplay playsinline muted></video>
-<canvas id="canvas"></canvas>
-<button id="flip-btn">🔄</button>
-<div id="status">Initializing…</div>
-<div id="loader">
-  <div class="spinner"></div>
-  <div class="loader-text" id="loader-text">Starting up…</div>
+<!-- ── LANDING ── -->
+<div id="landing">
+  <div class="stars" id="stars"></div>
+  <div class="landing-icon">✨</div>
+  <div class="landing-title">See Your Name<br>in Augmented Reality</div>
+  <div class="landing-sub">Enter your name and point the camera at a face</div>
+  <input id="name-input" type="text" placeholder="Your name…" maxlength="18" autocomplete="off" autocorrect="off" spellcheck="false" />
+  <button id="ok-btn">Start AR →</button>
 </div>
 
-<!-- Three.js importmap (local files) -->
+<!-- ── AR ── -->
+<div id="ar-wrap"></div>
+<button id="flip-btn">🔄</button>
+<div id="loader"><div class="spinner"></div><div class="loader-label" id="loader-label">Loading face model…</div></div>
+<div id="status"></div>
+
 <script type="importmap">
 { "imports": {
     "three": "./libs/three.module.min.js",
@@ -100,346 +164,234 @@
 
 <script type="module">
 import * as THREE from 'three';
-import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { MindARThree } from './libs/mindar-face-three.prod.js';
 
-// ───────────────────────────────────────────────
-// MediaPipe CDN endpoints
-// ───────────────────────────────────────────────
-const MP_WASM  = 'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/wasm';
-const MP_MODEL = 'https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/1/pose_landmarker_lite.task';
+// ── Generate star field ──
+const starsEl = document.getElementById('stars');
+for (let i = 0; i < 60; i++) {
+  const s = document.createElement('div');
+  s.className = 'star';
+  const size = Math.random() * 2.5 + 0.5;
+  s.style.cssText = `
+    width:${size}px; height:${size}px;
+    top:${Math.random()*100}%; left:${Math.random()*100}%;
+    --d:${(Math.random()*2+1).toFixed(1)}s;
+  `;
+  starsEl.appendChild(s);
+}
 
-// ───────────────────────────────────────────────
-// Bip001 bone → [MediaPipe from-idx, to-idx]
-// ───────────────────────────────────────────────
-const RETARGET = [
-  // Arms
-  { name: 'bip001 l upperarm_026', from: 11, to: 13 },
-  { name: 'bip001 l forearm_022',  from: 13, to: 15 },
-  { name: 'bip001 r upperarm_051', from: 12, to: 14 },
-  { name: 'bip001 r forearm_047',  from: 14, to: 16 },
-  // Legs
-  { name: 'bip001 l thigh_024',    from: 23, to: 25 },
-  { name: 'bip001 l calf_04',      from: 25, to: 27 },
-  { name: 'bip001 r thigh_049',    from: 24, to: 26 },
-  { name: 'bip001 r calf_029',     from: 26, to: 28 },
-];
+// ── DOM refs ──
+const landingEl   = document.getElementById('landing');
+const arWrapEl    = document.getElementById('ar-wrap');
+const flipBtn     = document.getElementById('flip-btn');
+const loaderEl    = document.getElementById('loader');
+const loaderLabel = document.getElementById('loader-label');
+const statusEl    = document.getElementById('status');
+const nameInput   = document.getElementById('name-input');
+const okBtn       = document.getElementById('ok-btn');
 
-// ───────────────────────────────────────────────
-// DOM
-// ───────────────────────────────────────────────
-const video      = document.getElementById('video');
-const canvas     = document.getElementById('canvas');
-const statusEl   = document.getElementById('status');
-const loaderEl   = document.getElementById('loader');
-const loaderText = document.getElementById('loader-text');
-const flipBtn    = document.getElementById('flip-btn');
+// ── State ──
+let facingMode  = 'environment';
+let mindarThree = null;
+let nameMesh    = null;
+let userName    = '';
 
-// ───────────────────────────────────────────────
-// State
-// ───────────────────────────────────────────────
-let facingMode     = 'environment';
-let poseLandmarker = null;
-let thanosRoot     = null;   // Group wrapper for model
-let boneMap        = {};
-let modelSwDist    = 1;      // shoulder-to-shoulder distance in model space
-let lastVidTime    = -1;
-
-// ───────────────────────────────────────────────
-// Three.js — orthographic camera
-// ───────────────────────────────────────────────
-const renderer = new THREE.WebGLRenderer({ canvas, alpha: true, antialias: true });
-renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-renderer.outputColorSpace = THREE.SRGBColorSpace;
-
-let W = window.innerWidth, H = window.innerHeight, aspect = W / H;
-renderer.setSize(W, H);
-
-const scene  = new THREE.Scene();
-// Ortho: x ∈ [-aspect, aspect], y ∈ [-1, 1]
-const camera = new THREE.OrthographicCamera(-aspect, aspect, 1, -1, 0.1, 50);
-camera.position.z = 10;
-
-// Lighting  — warm purple tint for Thanos vibe
-scene.add(new THREE.AmbientLight(0xffffff, 1.0));
-const keyLight = new THREE.DirectionalLight(0xffd0a0, 2.2);
-keyLight.position.set(1, 3, 4);
-scene.add(keyLight);
-const rimLight = new THREE.DirectionalLight(0x7040ff, 0.8);
-rimLight.position.set(-3, 1, -2);
-scene.add(rimLight);
-
-window.addEventListener('resize', () => {
-  W = window.innerWidth; H = window.innerHeight; aspect = W / H;
-  renderer.setSize(W, H);
-  camera.left = -aspect; camera.right = aspect;
-  camera.updateProjectionMatrix();
-});
-
-// ───────────────────────────────────────────────
-// Status helpers
-// ───────────────────────────────────────────────
-function setStatus(msg, autoHide = false) {
+// ── Status toast ──
+function toast(msg, duration = 3000) {
   statusEl.textContent = msg;
   statusEl.style.opacity = '1';
-  if (autoHide) setTimeout(() => { statusEl.style.opacity = '0'; }, 3500);
+  clearTimeout(statusEl._t);
+  statusEl._t = setTimeout(() => { statusEl.style.opacity = '0'; }, duration);
 }
 
-function setLoader(msg) {
-  loaderText.textContent = msg;
-  loaderEl.style.display = 'flex';
-}
+// ── Build canvas texture with the name ──
+function buildNameMesh(name) {
+  // Measure text to size canvas dynamically
+  const FONT_SIZE = 110;
+  const CANVAS_H  = 180;
+  const PAD_X     = 64;
 
-function hideLoader() {
-  loaderEl.style.display = 'none';
-}
+  const tmpCtx = document.createElement('canvas').getContext('2d');
+  tmpCtx.font = `bold ${FONT_SIZE}px -apple-system, Arial`;
+  const textW  = tmpCtx.measureText(name).width;
+  const canvasW = Math.ceil(textW + PAD_X * 2);
 
-// ───────────────────────────────────────────────
-// Camera
-// ───────────────────────────────────────────────
-async function startCamera() {
-  if (video.srcObject) video.srcObject.getTracks().forEach(t => t.stop());
-  try {
-    const stream = await navigator.mediaDevices.getUserMedia({
-      video: { facingMode, width: { ideal: 1280 }, height: { ideal: 720 } },
-      audio: false,
-    });
-    video.srcObject = stream;
-    await new Promise(r => { video.onloadedmetadata = r; });
-    video.play();
-  } catch (e) {
-    setStatus('Camera error: ' + e.message);
-    throw e;
+  const c   = document.createElement('canvas');
+  c.width   = canvasW;
+  c.height  = CANVAS_H;
+  const ctx = c.getContext('2d');
+
+  // Pill background
+  const r = CANVAS_H / 2;
+  ctx.beginPath();
+  if (ctx.roundRect) {
+    ctx.roundRect(0, 0, canvasW, CANVAS_H, r);
+  } else {
+    // Fallback for older browsers
+    ctx.moveTo(r, 0);
+    ctx.lineTo(canvasW - r, 0);
+    ctx.arcTo(canvasW, 0, canvasW, r, r);
+    ctx.lineTo(canvasW, CANVAS_H - r);
+    ctx.arcTo(canvasW, CANVAS_H, canvasW - r, CANVAS_H, r);
+    ctx.lineTo(r, CANVAS_H);
+    ctx.arcTo(0, CANVAS_H, 0, CANVAS_H - r, r);
+    ctx.lineTo(0, r);
+    ctx.arcTo(0, 0, r, 0, r);
+    ctx.closePath();
   }
+  // Gradient fill
+  const grad = ctx.createLinearGradient(0, 0, canvasW, CANVAS_H);
+  grad.addColorStop(0, 'rgba(124,58,237,0.75)');
+  grad.addColorStop(1, 'rgba(79,70,229,0.75)');
+  ctx.fillStyle = grad;
+  ctx.fill();
+
+  // Border
+  ctx.strokeStyle = 'rgba(255,255,255,0.5)';
+  ctx.lineWidth   = 3;
+  ctx.stroke();
+
+  // Glow + text
+  ctx.shadowColor  = 'rgba(255,255,255,0.9)';
+  ctx.shadowBlur   = 18;
+  ctx.font         = `bold ${FONT_SIZE}px -apple-system, Arial`;
+  ctx.textAlign    = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillStyle    = '#ffffff';
+  ctx.fillText(name, canvasW / 2, CANVAS_H / 2);
+
+  // Plane — keep canvas aspect ratio, height ≈ 0.45 MindAR units
+  const planeH = 0.45;
+  const planeW = (canvasW / CANVAS_H) * planeH;
+
+  const mesh = new THREE.Mesh(
+    new THREE.PlaneGeometry(planeW, planeH),
+    new THREE.MeshBasicMaterial({
+      map: new THREE.CanvasTexture(c),
+      transparent: true,
+      depthWrite: false,
+      side: THREE.DoubleSide,
+    })
+  );
+  return mesh;
 }
 
-// Mirror both video + canvas together for front camera
-function applyMirror() {
-  const m = facingMode === 'user';
-  video.classList.toggle('mirrored', m);
-  canvas.classList.toggle('mirrored', m);
+// ── Force camera facing mode before MindAR grabs it ──
+function overrideCamera(mode) {
+  const original = navigator.mediaDevices.getUserMedia.bind(navigator.mediaDevices);
+  navigator.mediaDevices.getUserMedia = constraints => {
+    if (constraints?.video) {
+      constraints.video = Object.assign(
+        typeof constraints.video === 'object' ? constraints.video : {},
+        { facingMode: mode }
+      );
+    }
+    return original(constraints);
+  };
 }
 
-flipBtn.addEventListener('click', async () => {
-  facingMode = facingMode === 'environment' ? 'user' : 'environment';
-  applyMirror();
-  await startCamera();
+// ── Start AR ──
+async function startAR() {
+  // Show loader, hide landing
+  landingEl.style.display = 'none';
+  loaderEl.style.display  = 'flex';
+  loaderLabel.textContent = 'Loading face model…';
+
+  overrideCamera(facingMode);
+
+  mindarThree = new MindARThree({
+    container: arWrapEl,
+    uiLoading: 'no',
+    uiError: 'no',
+    uiScanning: 'no',
+  });
+
+  const { renderer, scene, camera } = mindarThree;
+
+  // Lighting (basic — name is unlit canvas texture so ambient is enough)
+  scene.add(new THREE.AmbientLight(0xffffff, 1));
+
+  // Anchor = landmark 10 (top of forehead)
+  const anchor = mindarThree.addAnchor(10);
+
+  // Build name mesh and attach
+  nameMesh = buildNameMesh(userName);
+  nameMesh.position.set(0, 0.18, 0);  // slightly above forehead
+  anchor.group.add(nameMesh);
+
+  // Floating animation loop
+  const clock = new THREE.Clock();
+  renderer.setAnimationLoop(() => {
+    const t = clock.getElapsedTime();
+    if (nameMesh) {
+      nameMesh.position.y = 0.18 + Math.sin(t * 2.2) * 0.012;
+    }
+    renderer.render(scene, camera);
+  });
+
+  try {
+    await mindarThree.start();
+  } catch (e) {
+    toast('Camera error: ' + e.message, 5000);
+  }
+
+  loaderEl.style.display = 'none';
+  arWrapEl.style.display  = 'block';
+  flipBtn.style.display   = 'block';
+
+  toast('👆 Point camera at a face!', 3500);
+}
+
+// ── OK button ──
+okBtn.addEventListener('click', () => {
+  const val = nameInput.value.trim();
+  if (!val) { nameInput.focus(); nameInput.style.borderColor = '#ef4444'; return; }
+  nameInput.style.borderColor = '';
+  userName = val;
+  startAR();
 });
 
-// ───────────────────────────────────────────────
-// MediaPipe PoseLandmarker
-// ───────────────────────────────────────────────
-async function initPose() {
-  setLoader('Loading pose AI…');
-  const { PoseLandmarker, FilesetResolver } = await import(
-    'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/+esm'
-  );
-  const vision = await FilesetResolver.forVisionTasks(MP_WASM);
-  poseLandmarker = await PoseLandmarker.createFromOptions(vision, {
-    baseOptions: {
-      modelAssetPath: MP_MODEL,
-      delegate: 'GPU',
-    },
-    runningMode: 'VIDEO',
-    numPoses: 1,
-    minPoseDetectionConfidence: 0.5,
-    minPosePresenceConfidence: 0.5,
-    minTrackingConfidence: 0.5,
-    outputSegmentationMasks: false,
-  });
-}
+nameInput.addEventListener('keydown', e => {
+  if (e.key === 'Enter') okBtn.click();
+});
 
-// ───────────────────────────────────────────────
-// Load Thanos GLB
-// ───────────────────────────────────────────────
-async function loadThanos() {
-  setLoader('Loading Thanos…');
-  return new Promise((resolve, reject) => {
-    new GLTFLoader().load(
-      './assets/thanos.glb',
-      gltf => {
-        const model = gltf.scene;
+// ── Camera flip ──
+flipBtn.addEventListener('click', async () => {
+  if (!mindarThree) return;
+  facingMode = facingMode === 'environment' ? 'user' : 'environment';
+  toast(facingMode === 'user' ? '📷 Front camera' : '📷 Back camera', 2000);
 
-        // Collect all bones
-        model.traverse(obj => {
-          if (obj.isBone) boneMap[obj.name] = obj;
-        });
+  // Restart MindAR with new camera
+  await mindarThree.stop();
+  arWrapEl.innerHTML = '';
 
-        // Compute rest-pose state for every bone
-        model.updateMatrixWorld(true);
-        model.traverse(obj => {
-          if (!obj.isBone) return;
-          const kids = obj.children.filter(c => c.isBone);
-          // "pointing direction" = toward first bone child, in local parent space
-          obj.userData.restLocalDir = kids.length > 0
-            ? kids[0].position.clone().normalize()
-            : new THREE.Vector3(0, 1, 0);
-          obj.userData.restQuat = obj.quaternion.clone();
-        });
+  overrideCamera(facingMode);
 
-        // Measure shoulder-to-shoulder in model space (for scale)
-        const lClav = boneMap['bip001 l clavicle_05'];
-        const rClav = boneMap['bip001 r clavicle_030'];
-        if (lClav && rClav) {
-          const a = new THREE.Vector3(), b = new THREE.Vector3();
-          lClav.getWorldPosition(a); rClav.getWorldPosition(b);
-          modelSwDist = a.distanceTo(b);
-        }
-
-        // Wrap in a group so we can freely transform without affecting bone space
-        thanosRoot = new THREE.Group();
-        thanosRoot.add(model);
-        scene.add(thanosRoot);
-
-        resolve();
-      },
-      xhr => {
-        if (xhr.total) setLoader(`Loading Thanos… ${Math.round(xhr.loaded / xhr.total * 100)}%`);
-      },
-      reject
-    );
-  });
-}
-
-// ───────────────────────────────────────────────
-// Retargeting helpers
-// ───────────────────────────────────────────────
-
-// Normalised screen landmark → orthographic scene position
-function lmToScene(lm) {
-  return new THREE.Vector3(
-    (lm.x - 0.5) * 2 * aspect,
-    -(lm.y - 0.5) * 2,
-    0
-  );
-}
-
-// Direction vector from world landmark A → B  (MediaPipe world = Y-up, matches Three.js)
-function wlDir(wl, a, b) {
-  return new THREE.Vector3(
-    wl[b].x - wl[a].x,
-    wl[b].y - wl[a].y,
-    wl[b].z - wl[a].z
-  ).normalize();
-}
-
-// Point a bone along a given WORLD direction
-function aimBone(bone, worldDir) {
-  if (!bone?.userData?.restLocalDir) return;
-
-  // Parent's current world rotation
-  bone.parent.updateWorldMatrix(true, false);
-  const pq = new THREE.Quaternion();
-  bone.parent.getWorldQuaternion(pq);
-
-  // Target in parent-local space
-  const localTarget = worldDir.clone().applyQuaternion(pq.invert()).normalize();
-  const restDir     = bone.userData.restLocalDir.clone().normalize();
-
-  if (restDir.lengthSq() < 0.01 || localTarget.lengthSq() < 0.01) return;
-
-  const dot = restDir.dot(localTarget);
-  if (dot < -0.9999) {
-    // Anti-parallel: rotate 180° around a perpendicular axis
-    const perp = (Math.abs(restDir.x) < 0.9)
-      ? new THREE.Vector3(1, 0, 0) : new THREE.Vector3(0, 1, 0);
-    bone.quaternion.setFromAxisAngle(
-      new THREE.Vector3().crossVectors(restDir, perp).normalize(),
-      Math.PI
-    );
-  } else {
-    bone.quaternion.setFromUnitVectors(restDir, localTarget);
-  }
-}
-
-// ───────────────────────────────────────────────
-// Apply pose each frame
-// ───────────────────────────────────────────────
-function applyPose(lm, wl) {
-  if (!thanosRoot) return;
-
-  const vis = i => lm[i]?.visibility ?? 0;
-
-  // Need at least shoulders + hips
-  if (vis(11) < 0.3 || vis(12) < 0.3 || vis(23) < 0.3 || vis(24) < 0.3) return;
-
-  // ── Position: anchor model at hip midpoint ──
-  const hipScene = lmToScene({
-    x: (lm[23].x + lm[24].x) / 2,
-    y: (lm[23].y + lm[24].y) / 2,
+  mindarThree = new MindARThree({
+    container: arWrapEl,
+    uiLoading: 'no', uiError: 'no', uiScanning: 'no',
   });
 
-  // ── Scale: map model shoulder width → screen shoulder width ──
-  const lss = lmToScene(lm[11]);
-  const rss = lmToScene(lm[12]);
-  const screenSW = lss.distanceTo(rss);
-  const scale    = screenSW / (modelSwDist + 0.0001);
+  const { renderer, scene, camera } = mindarThree;
+  scene.add(new THREE.AmbientLight(0xffffff, 1));
 
-  thanosRoot.scale.setScalar(scale);
-  thanosRoot.position.set(hipScene.x, hipScene.y, -2);
+  const anchor = mindarThree.addAnchor(10);
+  nameMesh = buildNameMesh(userName);
+  nameMesh.position.set(0, 0.18, 0);
+  anchor.group.add(nameMesh);
 
-  // ── Spine: hip-mid → shoulder-mid ──
-  const hmw = {
-    x: (wl[23].x + wl[24].x) / 2,
-    y: (wl[23].y + wl[24].y) / 2,
-    z: (wl[23].z + wl[24].z) / 2,
-  };
-  const smw = {
-    x: (wl[11].x + wl[12].x) / 2,
-    y: (wl[11].y + wl[12].y) / 2,
-    z: (wl[11].z + wl[12].z) / 2,
-  };
-  const spineDir = new THREE.Vector3(
-    smw.x - hmw.x, smw.y - hmw.y, smw.z - hmw.z
-  ).normalize();
-  aimBone(boneMap['bip001 spine_052'], spineDir);
+  const clock = new THREE.Clock();
+  renderer.setAnimationLoop(() => {
+    const t = clock.getElapsedTime();
+    if (nameMesh) nameMesh.position.y = 0.18 + Math.sin(t * 2.2) * 0.012;
+    renderer.render(scene, camera);
+  });
 
-  // ── Limbs ──
-  for (const { name, from, to } of RETARGET) {
-    if (vis(from) > 0.25 && vis(to) > 0.25) {
-      aimBone(boneMap[name], wlDir(wl, from, to));
-    }
-  }
-}
+  await mindarThree.start();
+});
 
-// ───────────────────────────────────────────────
-// Render loop
-// ───────────────────────────────────────────────
-function tick() {
-  requestAnimationFrame(tick);
-
-  if (poseLandmarker && video.readyState >= 2 && video.currentTime !== lastVidTime) {
-    lastVidTime = video.currentTime;
-    try {
-      const r = poseLandmarker.detectForVideo(video, performance.now());
-      if (r.landmarks?.[0]) {
-        applyPose(r.landmarks[0], r.worldLandmarks[0]);
-      }
-    } catch (_) { /* skip frame on error */ }
-  }
-
-  renderer.render(scene, camera);
-}
-
-// ───────────────────────────────────────────────
-// Boot
-// ───────────────────────────────────────────────
-(async () => {
-  try {
-    await startCamera();
-    applyMirror();
-
-    setLoader('Loading…');
-    await Promise.all([initPose(), loadThanos()]);
-
-    hideLoader();
-    setStatus('🟣  Move into frame — full body visible!', true);
-    tick();
-  } catch (e) {
-    hideLoader();
-    setStatus('Error: ' + e.message);
-    console.error(e);
-  }
-})();
+// ── Auto-focus input ──
+nameInput.focus();
 </script>
 </body>
 </html>
