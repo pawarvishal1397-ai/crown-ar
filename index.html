@@ -316,7 +316,7 @@ async function startAR() {
 
   // Build name mesh and attach
   nameMesh = buildNameMesh(userName);
-  nameMesh.position.set(0, 0.18, 0);  // slightly above forehead
+  nameMesh.position.set(0, 0.55, 0);  // above top of head
   anchor.group.add(nameMesh);
 
   // Floating animation loop
@@ -383,7 +383,7 @@ flipBtn.addEventListener('click', async () => {
   const clock = new THREE.Clock();
   renderer.setAnimationLoop(() => {
     const t = clock.getElapsedTime();
-    if (nameMesh) nameMesh.position.y = 0.18 + Math.sin(t * 2.2) * 0.012;
+    if (nameMesh) nameMesh.position.y = 0.55 + Math.sin(t * 2.2) * 0.012;
     renderer.render(scene, camera);
   });
 
